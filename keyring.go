@@ -19,7 +19,9 @@ type Id interface {
 type Keyring interface {
 	Id
 	Add(string, []byte) (*Key, error)
+	AddType(string, string, []byte) (*Key, error)
 	Search(string) (*Key, error)
+	SearchType(string, string) (*Key, error)
 	SetDefaultTimeout(uint)
 }
 
@@ -70,7 +72,11 @@ func (kr *keyring) SetDefaultTimeout(nsecs uint) {
 
 // Add a new key to a keyring. The key can be searched for later by name.
 func (kr *keyring) Add(name string, key []byte) (*Key, error) {
-	r, err := add_key("user", name, key, int32(kr.id))
+	return kr.AddType(name, "user", key)
+}
+
+func (kr *keyring) AddType(name string, keyType string, key []byte) (*Key, error) {
+	r, err := add_key(keyType, name, key, int32(kr.id))
 	if err == nil {
 		key := &Key{Name: name, id: keyId(r), ring: kr.id}
 		if kr.defaultTtl != 0 {
@@ -86,7 +92,11 @@ func (kr *keyring) Add(name string, key []byte) (*Key, error) {
 // one. The key, if found, is linked to the top keyring that Search() was called
 // from.
 func (kr *keyring) Search(name string) (*Key, error) {
-	id, err := searchKeyring(kr.id, name, "user")
+	return kr.SearchType(name, "user")
+}
+
+func (kr *keyring) SearchType(name string, keyType string) (*Key, error) {
+	id, err := searchKeyring(kr.id, name, keyType)
 	if err == nil {
 		return &Key{Name: name, id: id, ring: kr.id}, nil
 	}
@@ -196,4 +206,12 @@ func Unlink(parent Keyring, child Id) error {
 // Unlink a named keyring from its parent.
 func UnlinkKeyring(kr NamedKeyring) error {
 	return keyctl_Unlink(keyId(kr.Id()), kr.(*namedKeyring).parent)
+}
+
+func Move(source Keyring, dest Keyring, child Id, excl bool) error {
+	var flags uint
+	if excl {
+		flags = keyctlMoveExcl
+	}
+	return keyctl_Move(keyId(child.Id()), keyId(source.Id()), keyId(dest.Id()), flags)
 }
