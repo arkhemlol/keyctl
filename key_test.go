@@ -109,7 +109,12 @@ func TestKeyInfo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer key.Unlink()
+	defer func() {
+		err := key.Unlink()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	info, err := key.Info()
 	if err != nil {
@@ -138,7 +143,12 @@ func TestKeySet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer key.Unlink()
+	defer func() {
+		err := key.Unlink()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	if err = key.Set([]byte("updated")); err != nil {
 		t.Fatal(err)
@@ -163,7 +173,12 @@ func TestKeySetWithTTL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer key.Unlink()
+	defer func() {
+		err := key.Unlink()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	// Set a TTL first so that Set() will re-arm it
 	if err = key.ExpireAfter(30); err != nil {

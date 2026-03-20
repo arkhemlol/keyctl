@@ -1,7 +1,9 @@
 package keyctl
 
 import (
+	"errors"
 	"os"
+	"slices"
 	"syscall"
 	"testing"
 )
@@ -39,10 +41,8 @@ func helperTestKeyRefs(ring Keyring, t *testing.T) []Reference {
 
 func filterErrno(e error, ignore ...syscall.Errno) error {
 	if en, ok := e.(syscall.Errno); ok {
-		for _, enok := range ignore {
-			if enok == en {
-				return nil
-			}
+		if slices.Contains(ignore, en) {
+			return nil
 		}
 	}
 
@@ -146,7 +146,12 @@ func TestReferenceValidOnKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer key.Unlink()
+	defer func() {
+		err := key.Unlink()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	ref := Reference{Id: key.Id(), parent: keyId(ring.Id())}
 	if !ref.Valid() {
@@ -164,7 +169,12 @@ func TestReferenceGetKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer key.Unlink()
+	defer func() {
+		err := key.Unlink()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	ref := Reference{Id: key.Id(), parent: keyId(ring.Id())}
 	obj, err := ref.Get()
@@ -191,7 +201,12 @@ func TestReferenceGetKeyring(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer UnlinkKeyring(nring)
+	defer func() {
+		err := UnlinkKeyring(nring)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	ref := Reference{Id: nring.Id(), parent: keyId(ring.Id())}
 	obj, err := ref.Get()
@@ -214,7 +229,12 @@ func TestReferenceInfoCaching(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer key.Unlink()
+	defer func() {
+		err := key.Unlink()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	ref := Reference{Id: key.Id(), parent: keyId(ring.Id())}
 
@@ -230,5 +250,71 @@ func TestReferenceInfoCaching(t *testing.T) {
 
 	if info1.Name != info2.Name {
 		t.Fatalf("cached info mismatch: %q != %q", info1.Name, info2.Name)
+	}
+}
+
+func TestReferenceValidOnExpiredKey(t *testing.T) {
+	// A Reference pointing to a non-existent key id.
+	// Info() will fail, so Valid() should return false.
+	ref := Reference{Id: 0x7FFFFFFF}
+	if ref.Valid() {
+		t.Fatal("expected Valid()=false for non-existent key")
+	}
+}
+
+func TestReferenceGetInvalidReference(t *testing.T) {
+	// Pre-populate info with valid=false to hit the ErrInvalidReference branch.
+	ref := Reference{
+		Id:   1,
+		info: &Info{valid: false},
+	}
+	_, err := ref.Get()
+	if !errors.Is(err, ErrInvalidReference) {
+		t.Fatalf("expected ErrInvalidReference, got: %v", err)
+	}
+}
+
+func TestReferenceGetUnsupportedType(t *testing.T) {
+	// Pre-populate info with an unknown type to hit the default branch.
+	ref := Reference{
+		Id:   1,
+		info: &Info{Type: "unsupported_type", valid: true},
+	}
+	_, err := ref.Get()
+	if !errors.Is(err, ErrUnsupportedKeyType) {
+		t.Fatalf("expected ErrUnsupportedKeyType, got: %v", err)
+	}
+}
+
+func TestReferenceGetAnonymousKeyring(t *testing.T) {
+	ring, err := SessionKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nring, err := CreateKeyring(ring, "test-anon-ref")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := UnlinkKeyring(nring)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	// Construct a Reference with Type="keyring" but empty Name
+	// to hit the anonymous keyring branch (returns *keyring, not *namedKeyring).
+	ref := Reference{
+		Id:     nring.Id(),
+		parent: keyId(ring.Id()),
+		info:   &Info{Type: "keyring", Name: "", valid: true},
+	}
+	obj, err := ref.Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := obj.(*keyring); !ok {
+		t.Fatalf("expected *keyring for anonymous keyring ref, got %T", obj)
 	}
 }

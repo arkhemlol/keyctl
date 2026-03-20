@@ -158,7 +158,12 @@ func TestSetPermOnKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer key.Unlink()
+	defer func() {
+		err := key.Unlink()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	perm := PermUserAll | PermProcessAll
 	if err := SetPerm(key, perm); err != nil {
@@ -185,7 +190,12 @@ func TestChownKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer key.Unlink()
+	defer func() {
+		err := key.Unlink()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	uid := os.Getuid()
 	if err := Chown(key, uid); err != nil {
@@ -204,7 +214,12 @@ func TestChgrpKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer key.Unlink()
+	defer func() {
+		err := key.Unlink()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	gid := os.Getgid()
 	if err := Chgrp(key, gid); err != nil {

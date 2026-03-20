@@ -158,8 +158,14 @@ if err := keyctl.Link(ring, key); err != nil {
   log.Fatal(err)
 }
 
-// Unlink from the named keyring; the key still exists in the session keyring.
+// Unlink from a specific keyring with the package-level function.
+// The key still exists in the session keyring.
 if err := keyctl.Unlink(ring, key); err != nil {
+  log.Fatal(err)
+}
+
+// key.Unlink() unlinks from the keyring the key was added to (session).
+if err := key.Unlink(); err != nil {
   log.Fatal(err)
 }
 ```

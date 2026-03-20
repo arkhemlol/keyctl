@@ -216,5 +216,12 @@ func Move(source Keyring, dest Keyring, child Id, excl bool) error {
 	if excl {
 		flags = keyctlMoveExcl
 	}
-	return keyctl_Move(keyId(child.Id()), keyId(source.Id()), keyId(dest.Id()), flags)
+	err := keyctl_Move(keyId(child.Id()), keyId(source.Id()), keyId(dest.Id()), flags)
+	// Update the key's ring ID if the move was successful
+	if err == nil {
+		if k, ok := child.(*Key); ok {
+			k.ring = keyId(dest.Id())
+		}
+	}
+	return err
 }

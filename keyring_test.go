@@ -182,14 +182,24 @@ func TestMoveKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("created keyring %v named %q", nring.Id(), nring.Name())
-	defer UnlinkKeyring(nring)
+	defer func() {
+		err := UnlinkKeyring(nring)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	key, err := ring.Add("move-test", []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("added test key as: %v\n", key.Id())
-	defer key.Unlink()
+	defer func() {
+		err := key.Unlink()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	err = Move(ring, nring, key, false)
 	if err != nil {
@@ -203,6 +213,82 @@ func TestMoveKey(t *testing.T) {
 	t.Logf("found key in keyring: %v\n", movedKey.Id())
 	if movedKey.Id() != key.Id() {
 		t.Fatal("IDs don't match\n")
+	}
+}
+
+// Move updates the Key's internal ring reference to the destination keyring,
+// so key.Unlink() correctly targets the new keyring after a move.
+func TestMoveKeyUnlinkSucceedsAfterMove(t *testing.T) {
+	ring, err := SessionKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nring, err := CreateKeyring(ring, "test-move-unlink")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := UnlinkKeyring(nring)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	key, err := ring.Add("move-unlink-test", []byte("data"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err = Move(ring, nring, key, false); err != nil {
+		t.Fatal(err)
+	}
+
+	// key.Unlink() should target nring after Move.
+	if err = key.Unlink(); err != nil {
+		t.Fatalf("key.Unlink() should succeed after Move, got: %v", err)
+	}
+}
+
+func TestMoveKeyExclusive(t *testing.T) {
+	ring, err := SessionKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nring, err := CreateKeyring(ring, "test-move-excl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := UnlinkKeyring(nring)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	key, err := ring.Add("excl-test", []byte("data"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Move with excl=true should succeed when no key with that name exists in dest.
+	if err = Move(ring, nring, key, true); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := key.Unlink()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	found, err := nring.Search("excl-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found.Id() != key.Id() {
+		t.Fatalf("moved key id %v != original %v", found.Id(), key.Id())
 	}
 }
 
@@ -272,13 +358,23 @@ func TestLinkAndUnlink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer UnlinkKeyring(nring)
+	defer func() {
+		err := UnlinkKeyring(nring)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	key, err := ring.Add("test-link-key", []byte("linkme"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer key.Unlink()
+	defer func() {
+		err := key.Unlink()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	if err = Link(nring, key); err != nil {
 		t.Fatal(err)
@@ -295,5 +391,99 @@ func TestLinkAndUnlink(t *testing.T) {
 	if err = Unlink(nring, key); err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("linked and unlinked key %v to/from keyring %v", key.Id(), nring.Id())
+
+	// Key must still exist in the session keyring after unlinking from nring.
+	found, err = ring.Search("test-link-key")
+	if err != nil {
+		t.Fatalf("key should still exist in session keyring after Unlink from named keyring: %v", err)
+	}
+	if found.Id() != key.Id() {
+		t.Fatalf("session key id %v != original %v", found.Id(), key.Id())
+	}
+	t.Logf("linked and unlinked key %v to/from keyring %v; key still in session", key.Id(), nring.Id())
+}
+
+func TestCreateKeyringInheritsParentTTL(t *testing.T) {
+	session, err := SessionKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	parent, err := CreateKeyring(session, "test-ttl-parent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := UnlinkKeyring(parent)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	// Give the parent a TTL so child creation hits the ttl > 0 branch.
+	if err = SetKeyringTTL(parent, 30); err != nil {
+		t.Fatal(err)
+	}
+
+	child, err := CreateKeyring(parent, "test-ttl-child")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := UnlinkKeyring(child)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	t.Logf("child keyring %v inherited TTL from parent %v", child.Id(), parent.Id())
+}
+
+func TestOpenReaderNotFound(t *testing.T) {
+	ring, err := SessionKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = OpenReader("nonexistent-key-for-reader-test", ring)
+	if err == nil {
+		t.Fatal("expected OpenReader to fail for non-existent key")
+	}
+}
+
+func TestReaderOnInvalidKey(t *testing.T) {
+	// Construct a Key with an invalid id so that Get() fails inside Read().
+	badKey := &Key{Name: "bad", id: keyId(0x7FFFFFFF)}
+	r := NewReader(badKey)
+
+	buf := make([]byte, 64)
+	n, err := r.Read(buf)
+	if err == nil {
+		t.Fatal("expected Read to fail on invalid key")
+	}
+	if n != -1 {
+		t.Fatalf("expected n=-1 on error, got %d", n)
+	}
+
+	// Second Read should return the same cached error.
+	n2, err2 := r.Read(buf)
+	if err2 != err {
+		t.Fatalf("expected cached error %v, got %v", err, err2)
+	}
+	if n2 != -1 {
+		t.Fatalf("expected n=-1 on cached error, got %d", n2)
+	}
+}
+
+func TestAddTypeErrorPath(t *testing.T) {
+	ring, err := SessionKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// An invalid key type should cause add_key to fail.
+	_, err = ring.AddType("test-bad-type", "", []byte("data"))
+	if err == nil {
+		t.Fatal("expected AddType with empty type to fail")
+	}
 }

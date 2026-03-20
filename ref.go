@@ -102,7 +102,9 @@ func (i Info) Valid() bool {
 // invalid if they have expired since the reference was created.
 func (r *Reference) Valid() bool {
 	if r.info == nil {
-		r.Info()
+		if _, err := r.Info(); err != nil {
+			return false
+		}
 	}
 	return r.info.valid
 }
