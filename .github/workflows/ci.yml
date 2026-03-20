@@ -1,0 +1,75 @@
+name: CI
+
+on:
+    push:
+        branches: [master]
+        tags: ["v*"]
+    pull_request:
+        branches: [master]
+
+permissions:
+    contents: read
+
+jobs:
+    lint:
+        name: Lint
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-go@v5
+              with:
+                  go-version-file: go.mod
+
+            - name: golangci-lint
+              uses: golangci/golangci-lint-action@v7
+              with:
+                  version: latest
+
+            - name: govulncheck
+              uses: golang/govulncheck-action@v1
+              with:
+                  repo-checkout: false
+                  go-version-file: go.mod
+
+    test:
+        name: Test
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-go@v5
+              with:
+                  go-version-file: go.mod
+
+            - name: Run tests
+              run: go test -v -race -coverprofile=./cover.out -covermode=atomic ./...
+
+            - name: Coverage badge
+              uses: vladopajic/go-test-coverage@v2
+              with:
+                  profile: cover.out
+                  git-token: ${{ github.ref_name == 'master' && secrets.GITHUB_TOKEN || '' }}
+                  ## Orphan branch where the badge SVG is stored.
+                  ## Create it once:  git checkout --orphan badges && git rm -rf . && git commit --allow-empty -m init && git push origin badges
+                  git-branch: badges
+
+    # Source-code release only.
+    release:
+        name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        needs: [lint, test]
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Create GitHub Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  generate_release_notes: true

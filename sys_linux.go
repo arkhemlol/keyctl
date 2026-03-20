@@ -60,8 +60,6 @@ const (
 	keyctlWatchKey
 )
 
-var debugSyscalls bool
-
 func (id keyId) Id() int32 {
 	return int32(id)
 }
@@ -349,7 +347,7 @@ func updateKey(id keyId, payload []byte) error {
 }
 
 func keyctl_Move(id, from_ring keyId, to_ring keyId, flags uint) error {
-	_, _, errno := syscall.Syscall6(syscall_keyctl, uintptr(keyctlMove), uintptr(id), uintptr(from_ring), uintptr(to_ring), uintptr(flags), 0)
+	_, _, errno := unix.Syscall6(unix.SYS_KEYCTL, uintptr(keyctlMove), uintptr(id), uintptr(from_ring), uintptr(to_ring), uintptr(flags), 0)
 	if errno != 0 {
 		return errno
 	}

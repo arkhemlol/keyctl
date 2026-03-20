@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build linux
+//go:build linux
 
 // A Go interface to linux kernel keyrings (keyctl interface)
 package keyctl
@@ -161,6 +161,9 @@ func CreateKeyring(parent Keyring, name string) (NamedKeyring, error) {
 
 	if ttl > 0 {
 		err = keyctl_SetTimeout(ring.id, ttl)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return ring, nil

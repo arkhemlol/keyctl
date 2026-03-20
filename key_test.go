@@ -98,3 +98,87 @@ func TestRandomKey700(t *testing.T) {
 	}
 	t.Logf("key %v expired after five seconds", id.Id())
 }
+
+func TestKeyInfo(t *testing.T) {
+	ring, err := SessionKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	key, err := ring.Add("test-key-info", []byte("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer key.Unlink()
+
+	info, err := key.Info()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.Valid() {
+		t.Fatal("key info should be valid")
+	}
+	if info.Name != "test-key-info" {
+		t.Fatalf("info.Name = %q, want %q", info.Name, "test-key-info")
+	}
+	if info.Type != "key" {
+		t.Fatalf("info.Type = %q, want %q", info.Type, "key")
+	}
+	t.Logf("key info: type=%s name=%s uid=%d gid=%d perm=%s",
+		info.Type, info.Name, info.Uid, info.Gid, info.Perm)
+}
+
+func TestKeySet(t *testing.T) {
+	ring, err := SessionKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	key, err := ring.Add("test-key-set", []byte("original"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer key.Unlink()
+
+	if err = key.Set([]byte("updated")); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := key.Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "updated" {
+		t.Fatalf("key value after Set = %q, want %q", string(data), "updated")
+	}
+}
+
+func TestKeySetWithTTL(t *testing.T) {
+	ring, err := SessionKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	key, err := ring.Add("test-key-set-ttl", []byte("original"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer key.Unlink()
+
+	// Set a TTL first so that Set() will re-arm it
+	if err = key.ExpireAfter(30); err != nil {
+		t.Fatal(err)
+	}
+
+	if err = key.Set([]byte("updated-with-ttl")); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := key.Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "updated-with-ttl" {
+		t.Fatalf("key value = %q, want %q", string(data), "updated-with-ttl")
+	}
+}

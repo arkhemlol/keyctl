@@ -205,3 +205,95 @@ func TestMoveKey(t *testing.T) {
 		t.Fatal("IDs don't match\n")
 	}
 }
+
+func TestUserKeyring(t *testing.T) {
+	ring, err := UserKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ring.Id() == 0 {
+		t.Fatal("UserKeyring returned zero id")
+	}
+	t.Logf("UserKeyring id: %v", ring.Id())
+}
+
+func TestThreadKeyring(t *testing.T) {
+	ring, err := ThreadKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ring.Id() == 0 {
+		t.Fatal("ThreadKeyring returned zero id")
+	}
+	t.Logf("ThreadKeyring id: %v", ring.Id())
+}
+
+func TestProcessKeyring(t *testing.T) {
+	ring, err := ProcessKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ring.Id() == 0 {
+		t.Fatal("ProcessKeyring returned zero id")
+	}
+	t.Logf("ProcessKeyring id: %v", ring.Id())
+}
+
+func TestGroupKeyring(t *testing.T) {
+	ring, err := GroupKeyring()
+	if err != nil {
+		t.Skipf("GroupKeyring not available: %v", err)
+	}
+	t.Logf("GroupKeyring id: %v", ring.Id())
+}
+
+func TestKeyringInfo(t *testing.T) {
+	ring, err := SessionKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := ring.Info()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.Valid() {
+		t.Fatal("session keyring info should be valid")
+	}
+	t.Logf("session keyring info: type=%s name=%s perm=%s", info.Type, info.Name, info.Perm)
+}
+
+func TestLinkAndUnlink(t *testing.T) {
+	ring, err := SessionKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nring, err := CreateKeyring(ring, "test-link-ring")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer UnlinkKeyring(nring)
+
+	key, err := ring.Add("test-link-key", []byte("linkme"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer key.Unlink()
+
+	if err = Link(nring, key); err != nil {
+		t.Fatal(err)
+	}
+
+	found, err := nring.Search("test-link-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found.Id() != key.Id() {
+		t.Fatalf("linked key id %v != original %v", found.Id(), key.Id())
+	}
+
+	if err = Unlink(nring, key); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("linked and unlinked key %v to/from keyring %v", key.Id(), nring.Id())
+}

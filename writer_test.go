@@ -1,6 +1,7 @@
 package keyctl
 
 import (
+	"errors"
 	"testing"
 )
 
@@ -41,6 +42,10 @@ func TestStreamWriterUpdate(t *testing.T) {
 	}
 
 	ring, err = CreateKeyring(ring, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	var key *Key
 
 	for key == nil {
@@ -59,7 +64,7 @@ func TestStreamWriterUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = w.(Flusher).Flush(); err != nil {
+	if err = w.Flush(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -87,7 +92,7 @@ func TestStreamWriterFlush(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = w.(Flusher).Flush(); err != nil {
+	if err = w.Flush(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -96,4 +101,55 @@ func TestStreamWriterFlush(t *testing.T) {
 	}
 	helperCompareBlock(t, "test218bytestream", blk1, ring)
 	t.Logf("[flushed] compared %d random block key in common session ring: %v", len(blk1), blk1)
+}
+
+func TestWriterDoubleClose(t *testing.T) {
+	ring, err := SessionKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w, err := CreateWriter("test-double-close", ring)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = w.Write([]byte("data")); err != nil {
+		t.Fatal(err)
+	}
+
+	// First close should succeed
+	if err = w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Second close must return ErrStreamClosed
+	if err = w.Close(); !errors.Is(err, ErrStreamClosed) {
+		t.Fatalf("second Close() = %v, want ErrStreamClosed", err)
+	}
+}
+
+func TestWriterFlushAfterClose(t *testing.T) {
+	ring, err := SessionKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w, err := CreateWriter("test-flush-after-close", ring)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = w.Write([]byte("data")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err = w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Flush after close must return ErrStreamClosed
+	if err = w.Flush(); !errors.Is(err, ErrStreamClosed) {
+		t.Fatalf("Flush() after Close() = %v, want ErrStreamClosed", err)
+	}
 }
