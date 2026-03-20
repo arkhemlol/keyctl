@@ -1,8 +1,9 @@
 package keyctl
 
 import (
-	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 type keyctlCommand int
@@ -138,7 +139,7 @@ func (cmd keyctlCommand) String() string {
 }
 
 func keyctl_SetTimeout(id keyId, nsecs uint) error {
-	_, _, errno := syscall.Syscall(syscall_keyctl, uintptr(keyctlSetTimeout), uintptr(id), uintptr(nsecs))
+	_, _, errno := unix.Syscall(unix.SYS_KEYCTL, uintptr(keyctlSetTimeout), uintptr(id), uintptr(nsecs))
 	if errno != 0 {
 		return errno
 	}
@@ -146,7 +147,7 @@ func keyctl_SetTimeout(id keyId, nsecs uint) error {
 }
 
 func keyctl_Read(id keyId, b *byte, size int) (int32, error) {
-	v1, _, errno := syscall.Syscall6(syscall_keyctl, uintptr(keyctlRead), uintptr(id), uintptr(unsafe.Pointer(b)), uintptr(size), 0, 0)
+	v1, _, errno := unix.Syscall6(unix.SYS_KEYCTL, uintptr(keyctlRead), uintptr(id), uintptr(unsafe.Pointer(b)), uintptr(size), 0, 0)
 	if errno != 0 {
 		return -1, errno
 	}
@@ -155,7 +156,7 @@ func keyctl_Read(id keyId, b *byte, size int) (int32, error) {
 }
 
 func keyctl_Link(id, ring keyId) error {
-	_, _, errno := syscall.Syscall(syscall_keyctl, uintptr(keyctlLink), uintptr(id), uintptr(ring))
+	_, _, errno := unix.Syscall(unix.SYS_KEYCTL, uintptr(keyctlLink), uintptr(id), uintptr(ring))
 	if errno != 0 {
 		return errno
 	}
@@ -163,7 +164,7 @@ func keyctl_Link(id, ring keyId) error {
 }
 
 func keyctl_Unlink(id, ring keyId) error {
-	_, _, errno := syscall.Syscall(syscall_keyctl, uintptr(keyctlUnlink), uintptr(id), uintptr(ring))
+	_, _, errno := unix.Syscall(unix.SYS_KEYCTL, uintptr(keyctlUnlink), uintptr(id), uintptr(ring))
 	if errno != 0 {
 		return errno
 	}
@@ -171,7 +172,7 @@ func keyctl_Unlink(id, ring keyId) error {
 }
 
 func keyctl_Chown(id keyId, user, group int) error {
-	_, _, errno := syscall.Syscall6(syscall_keyctl, uintptr(keyctlChown), uintptr(id), uintptr(user), uintptr(group), 0, 0)
+	_, _, errno := unix.Syscall6(unix.SYS_KEYCTL, uintptr(keyctlChown), uintptr(id), uintptr(user), uintptr(group), 0, 0)
 	if errno != 0 {
 		return errno
 	}
@@ -179,7 +180,7 @@ func keyctl_Chown(id keyId, user, group int) error {
 }
 
 func keyctl_SetPerm(id keyId, perm uint32) error {
-	_, _, errno := syscall.Syscall(syscall_keyctl, uintptr(keyctlSetPerm), uintptr(id), uintptr(perm))
+	_, _, errno := unix.Syscall(unix.SYS_KEYCTL, uintptr(keyctlSetPerm), uintptr(id), uintptr(perm))
 	if errno != 0 {
 		return errno
 	}
@@ -189,24 +190,24 @@ func keyctl_SetPerm(id keyId, perm uint32) error {
 func add_key(keyType, keyDesc string, payload []byte, id int32) (int32, error) {
 	var (
 		err    error
-		errno  syscall.Errno
+		errno  unix.Errno
 		b1, b2 *byte
 		r1     uintptr
 		pptr   unsafe.Pointer
 	)
 
-	if b1, err = syscall.BytePtrFromString(keyType); err != nil {
+	if b1, err = unix.BytePtrFromString(keyType); err != nil {
 		return 0, err
 	}
 
-	if b2, err = syscall.BytePtrFromString(keyDesc); err != nil {
+	if b2, err = unix.BytePtrFromString(keyDesc); err != nil {
 		return 0, err
 	}
 
 	if len(payload) > 0 {
 		pptr = unsafe.Pointer(&payload[0])
 	}
-	r1, _, errno = syscall.Syscall6(syscall_add_key,
+	r1, _, errno = unix.Syscall6(unix.SYS_ADD_KEY,
 		uintptr(unsafe.Pointer(b1)),
 		uintptr(unsafe.Pointer(b2)),
 		uintptr(pptr),
@@ -225,12 +226,12 @@ func getfsgid() (int32, error) {
 	var (
 		a1    int32
 		err   error
-		errno syscall.Errno
+		errno unix.Errno
 		r1    uintptr
 	)
 
 	a1 = -1
-	if r1, _, errno = syscall.Syscall(syscall_setfsgid, uintptr(a1), 0, 0); errno != 0 {
+	if r1, _, errno = unix.Syscall(unix.SYS_SETFSGID, uintptr(a1), 0, 0); errno != 0 {
 		err = errno
 		return int32(-1), err
 	}
@@ -238,7 +239,7 @@ func getfsgid() (int32, error) {
 }
 
 func newKeyring(id keyId) (*keyring, error) {
-	r1, _, errno := syscall.Syscall(syscall_keyctl, uintptr(keyctlGetKeyringId), uintptr(id), uintptr(1))
+	r1, _, errno := unix.Syscall(unix.SYS_KEYCTL, uintptr(keyctlGetKeyringId), uintptr(id), uintptr(1))
 	if errno != 0 {
 		return nil, errno
 	}
@@ -264,13 +265,13 @@ func searchKeyring(id keyId, name, keyType string) (keyId, error) {
 		err    error
 	)
 
-	if b1, err = syscall.BytePtrFromString(keyType); err != nil {
+	if b1, err = unix.BytePtrFromString(keyType); err != nil {
 		return 0, err
 	}
-	if b2, err = syscall.BytePtrFromString(name); err != nil {
+	if b2, err = unix.BytePtrFromString(name); err != nil {
 		return 0, err
 	}
-	r1, _, errno := syscall.Syscall6(syscall_keyctl, uintptr(keyctlSearch), uintptr(id), uintptr(unsafe.Pointer(b1)), uintptr(unsafe.Pointer(b2)), 0, 0)
+	r1, _, errno := unix.Syscall6(unix.SYS_KEYCTL, uintptr(keyctlSearch), uintptr(id), uintptr(unsafe.Pointer(b1)), uintptr(unsafe.Pointer(b2)), 0, 0)
 	if errno != 0 {
 		err = errno
 	}
@@ -287,7 +288,7 @@ func describeKeyId(id keyId) ([]byte, error) {
 	size = len(b1)
 	sizeRead = size + 1
 	for sizeRead > size {
-		r1, _, errno := syscall.Syscall6(syscall_keyctl, uintptr(keyctlDescribe), uintptr(id), uintptr(unsafe.Pointer(&b1[0])), uintptr(size), 0, 0)
+		r1, _, errno := unix.Syscall6(unix.SYS_KEYCTL, uintptr(keyctlDescribe), uintptr(id), uintptr(unsafe.Pointer(&b1[0])), uintptr(size), 0, 0)
 		if errno != 0 {
 			return nil, errno
 		}
@@ -314,7 +315,7 @@ func listKeys(id keyId) ([]keyId, error) {
 	size = len(b1)
 	sizeRead = size + 1
 	for sizeRead > size {
-		r1, _, errno := syscall.Syscall6(syscall_keyctl, uintptr(keyctlRead), uintptr(id), uintptr(unsafe.Pointer(&b1[0])), uintptr(size), 0, 0)
+		r1, _, errno := unix.Syscall6(unix.SYS_KEYCTL, uintptr(keyctlRead), uintptr(id), uintptr(unsafe.Pointer(&b1[0])), uintptr(size), 0, 0)
 		if errno != 0 {
 			return nil, errno
 		}
@@ -340,7 +341,7 @@ func updateKey(id keyId, payload []byte) error {
 	if size == 0 {
 		payload = make([]byte, 1)
 	}
-	_, _, errno := syscall.Syscall6(syscall_keyctl, uintptr(keyctlUpdate), uintptr(id), uintptr(unsafe.Pointer(&payload[0])), uintptr(size), 0, 0)
+	_, _, errno := unix.Syscall6(unix.SYS_KEYCTL, uintptr(keyctlUpdate), uintptr(id), uintptr(unsafe.Pointer(&payload[0])), uintptr(size), 0, 0)
 	if errno != 0 {
 		return errno
 	}
