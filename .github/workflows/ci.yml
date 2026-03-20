@@ -3,7 +3,6 @@ name: CI
 on:
     push:
         branches: [master]
-        tags: ["v*"]
     pull_request:
         branches: [master]
 
@@ -59,7 +58,6 @@ jobs:
     # Source-code release only.
     release:
         name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
         needs: [lint, test]
         runs-on: ubuntu-latest
         permissions:
@@ -71,5 +69,6 @@ jobs:
 
             - name: Create GitHub Release
               uses: softprops/action-gh-release@v2
+              if: github.ref_type == 'tag'
               with:
                   generate_release_notes: true
